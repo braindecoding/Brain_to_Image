@@ -9,3 +9,11 @@ Use raw_to_pickle to extract the eeg signal data from the raw files and create a
 ## Filtering data
 
 use filter_data to apply notch and bandwidth filters to data
+
+## Use MNE to remove artifacts
+
+use mne_pipeline to apply artifact removal
+
+## Apply common average reference
+
+use car_pipeline to apply common average reference, filter on correltation, apply sliding window and save train/test split data for training models.
