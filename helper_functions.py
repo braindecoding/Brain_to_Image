@@ -795,3 +795,38 @@ def band_frequancy_intersections(freqs,bands):
     idx_gamma = np.logical_and(freqs >= bands["Gamma"]["low"], freqs <= bands["Gamma"]["high"])
 
     return idx_delta,idx_theta,idx_alpha,idx_beta,idx_gamma
+
+# function to Create windowed data based on window 32, overlap 4 = step size 28
+def sliding_window_eeg(signal, window_size=32, overlap=4):
+    """
+    Apply a sliding window with overlap to a 2-second EEG signal.
+
+    Parameters:
+    signal (numpy.ndarray): 1D array of EEG signal data (256 samples)
+    window_size (int): Size of each window (default: 32)
+    overlap (int): Number of overlapping samples between windows (default: 4)
+
+    Returns:
+    numpy.ndarray: 2D array of windowed data
+    """
+    if len(signal) != 256:
+        raise ValueError("Signal length must be 256 samples (2 seconds at 128Hz)")
+
+    # Calculate the step size
+    step = window_size - overlap
+
+    # Calculate the number of windows
+    num_windows = (len(signal) - window_size) // step + 1
+
+    # Create an empty array to store the windowed data
+    windowed_data = np.zeros((num_windows, window_size, 1))
+
+    # Apply the sliding window
+    for i in range(num_windows):
+        start = i * step
+        end = start + window_size
+        windowed_data[i] = signal[start:end].reshape(window_size,1)
+    return windowed_data
+
+# w_data = sliding_window_eeg(df[df[label]==3].iloc[4]['EEGdata_AF3'],16,2)
+# w_data.shape
