@@ -12,6 +12,7 @@ import seaborn as sns
 from keras.utils import to_categorical
 from scipy.integrate import simps
 from scipy.signal import butter, filtfilt, iirnotch, welch
+from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 from Brain_to_Image import batch_csv as batch
@@ -22,7 +23,8 @@ from Brain_to_Image.dataset_formats import (MDB2022_MNIST_EP_params,
                                             keys_MNIST_EP, keys_MNIST_IN,
                                             keys_MNIST_MU)
 
-
+class_labels = [0,1,2,3,4,5,6,7,8,9]
+keys_ = ['EEGdata_T7','EEGdata_P7','EEGdata_T8','EEGdata_P8']
 dataset = "MNIST_EP"
 root_dir = f"Datasets/MindBigData MNIST of Brain Digits/{dataset}"
 if True:
@@ -86,3 +88,23 @@ df_copy['corr_mean_all'] = df_copy[corr_keys_].mean(axis=1)
 fraction = 1
 sampled_indexes = df_copy[df_copy['corr_mean_core'] > 0.2].groupby(label).apply(lambda x: x.sample(frac=fraction)).index.get_level_values(1).tolist()
 sampled_df = df_copy.loc[sampled_indexes]
+
+## split data to test train
+
+feature_data = []
+label_data = []
+for class_label in class_labels:
+    class_df = sampled_df[sampled_df[label]==class_label]
+    for idx, row in tqdm(class_df.iterrows()):
+        for key in keys_:
+            w_data = sliding_window_eeg(row[key])
+            feature_data.append(np.array(w_data))
+            label_data.append(to_categorical(int(class_label),num_classes=len(class_labels)))
+
+train_data = np.array(feature_data)
+labels = np.array(label_data).astype(np.uint8)
+
+print(train_data.shape)
+print(labels.shape)
+
+x_train, x_test, y_train, y_test = train_test_split(train_data, labels, test_size=0.1, random_state=42)
