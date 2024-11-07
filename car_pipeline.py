@@ -108,3 +108,9 @@ print(train_data.shape)
 print(labels.shape)
 
 x_train, x_test, y_train, y_test = train_test_split(train_data, labels, test_size=0.1, random_state=42)
+
+prefix = ["data_4ch_90_32_4_","fil_corr_","data_4ch_epoch_filtered_324_0-2","data_4ch_epoch_filtered_324_0-85"]
+print(f"writing {root_dir}/{prefix[3]}{output_file}")
+data_out = {'x_train':x_train,'x_test':x_test,'y_train':y_train,'y_test':y_test} #{'x_test':train_data,'y_test':labels}
+with open(f"{root_dir}/{prefix[3]}{output_file}", 'wb') as f:
+    pickle.dump(data_out, f)
