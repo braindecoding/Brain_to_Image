@@ -1,7 +1,8 @@
 # Brain to Image
 
 This repository is a collection of scripts and code used in my Master's project. 
-Abstract 
+
+### Abstract 
 This study explores the integration of Electroencephalography (EEG) data and Generative Adversarial Networks (GANs) to generate visual representations of perceived images. Utilizing the Mind Big Data (MBD) dataset and Emotiv EPOC® device, EEG signals were captured and pre-processed to remove noise and artifacts. A Convolutional Neural Network (CNN) was employed to classify and encode these signals into latent space vectors. These vectors, along with class conditioning labels, were fed into an Auxiliary Classifier GAN (ACGAN) to generate images. The study faced challenges such as signal complexity, noise, and limited training data. Despite these, the ACGAN model, particularly with a modulation layer and concatenation with embedding, demonstrated the ability to produce images with a Structural Similarity Index (SSIM) score of approximately 0.3, indicating a 65% similarity to the ground truth. The results validate the hypothesis that EEG signals can be used to generate representative images, although further improvements in data preprocessing and classification accuracy are needed. Future work could explore reinforcement learning to enhance the model's performance.
 
 ## Datasets
