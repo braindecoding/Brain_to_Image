@@ -6,3 +6,6 @@ In particular the data from https://huggingface.co/datasets/DavidVivancos/MindBi
 
 Use raw_to_pickle to extract the eeg signal data from the raw files and create a pandas data table to make it easier to process.
 
+## Filtering data
+
+use filter to apply notch and bandwidth filters to data
