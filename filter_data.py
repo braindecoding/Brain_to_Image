@@ -5,11 +5,11 @@ from scipy.signal import welch
 
 root_dir = "Datasets/MindBigData - The Visual MNIST of Brain Digits/2022Data"
 # ## TRAIN
-train_input_file = "train_MindBigDataVisualMnist2021-Muse2v0.17.csv"
-train_output_file = "train_MindBigDataVisualMnist2021-Muse2v0.17.pkl"
+train_input_file = "train_MindBigData2022_MNIST_EP.csv"
+train_output_file = "train_MindBigData2022_MNIST_EP.pkl"
 ## TEST
-test_input_file = "test_MindBigDataVisualMnist2021-Muse2v0.17.csv"
-test_output_file = "test_MindBigDataVisualMnist2021-Muse2v0.17.pkl"
+test_input_file = "test_MindBigData2022_MNIST_EP.csv"
+test_output_file = "test_MindBigData2022_MNIST_EP.pkl"
 keys_to_import = ['EEGdata_TP9','EEGdata_TP10','EEGdata_AF7','EEGdata_AF8']
 label_field = 'digit_label'
 sample_rate = 256  #Hz
