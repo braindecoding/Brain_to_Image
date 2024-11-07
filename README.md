@@ -8,4 +8,4 @@ Use raw_to_pickle to extract the eeg signal data from the raw files and create a
 
 ## Filtering data
 
-use filter to apply notch and bandwidth filters to data
+use filter_data to apply notch and bandwidth filters to data
