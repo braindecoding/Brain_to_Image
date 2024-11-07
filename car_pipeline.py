@@ -97,7 +97,7 @@ for class_label in class_labels:
     class_df = sampled_df[sampled_df[label]==class_label]
     for idx, row in tqdm(class_df.iterrows()):
         for key in keys_:
-            w_data = sliding_window_eeg(row[key])
+            w_data = hf.sliding_window_eeg(row[key])
             feature_data.append(np.array(w_data))
             label_data.append(to_categorical(int(class_label),num_classes=len(class_labels)))
 
