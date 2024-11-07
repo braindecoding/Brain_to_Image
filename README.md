@@ -18,4 +18,4 @@ use mne_pipeline to apply artifact removal
 
 ## Apply common average reference
 
-use car_pipeline to apply common average reference, filter on correltation, apply sliding window and save train/test split data for training models.
+use car_pipeline to apply common average reference, filter on correlation, apply sliding window and save train/test split data for training models.
