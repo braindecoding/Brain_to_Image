@@ -1,4 +1,6 @@
-# braintoimage
+# Brain to Image
+
+This repository is a collection of scripts and code used in my Master's project. 
 
 ## Datasets
 All data used for training has been based the that provided by https://vivancos.com/ https://mindbigdata.com/opendb/index.html
