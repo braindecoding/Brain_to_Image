@@ -22,3 +22,7 @@ use mne_pipeline to apply artifact removal
 ## Apply common average reference
 
 use car_pipeline to apply common average reference, filter on correlation, apply sliding window and save train/test split data for training models.
+
+## Training models
+
+apply filtering, artifact removal and CAR, save tes/train split as pickle file. Use the train scripts to laod the data and train GAN.
