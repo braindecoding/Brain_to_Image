@@ -25,4 +25,4 @@ use car_pipeline to apply common average reference, filter on correlation, apply
 
 ## Training models
 
-apply filtering, artifact removal and CAR, save tes/train split as pickle file. Use the train scripts to laod the data and train GAN.
+apply filtering, artifact removal and CAR, save test/train split as pickle file. Use the train scripts to laod the data and train GAN.
