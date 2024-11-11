@@ -17,7 +17,7 @@ use filter_data to apply notch and bandwidth filters to data
 
 ## Use MNE to remove artifacts
 
-use mne_pipeline to apply artifact removal
+use mne_pipeline to apply artifact removal, mne pipeline can also be used to apply filtering and display and inspect eeg data. https://mne.tools/stable/index.html
 
 ## Apply common average reference
 
