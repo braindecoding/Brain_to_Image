@@ -24,7 +24,9 @@ use mne_pipeline to apply artifact removal, mne pipeline can also be used to app
 
 ## Apply common average reference
 
-use car_pipeline to apply common average reference, filter on correlation, apply sliding window and save train/test split data for training models.
+use car_pipeline to apply common average reference (CAR), filter on correlation, apply sliding window and save train/test split data for training models.
+The project paper uses method 1 for CAR which is where the baselined car is subtracted from each signal and then the resultand signal is correlated with the CAR and selection is made > ~0.9 correlation
+in notebooks the pipeline_data not book shows how this is done with some comments.
 
 ## Training models
 
