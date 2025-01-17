@@ -69,8 +69,17 @@ for idx, row in tqdm(sampled_df.iterrows()):
     car_corrected = car - baseline
 
     for key in keys_MNIST_EP:
+        ## CAR common avaerage reference
+        ## Correlation = similarity between signal or subtracted signal and CAR
+        ##
+        ## method used in project
+        ## subtract the CAR from each signal and then find corelation with result and CAR
+        # un comment for method 1
         #car_subtracted = corr_data[key] - car_corrected
         #correlation = np.corrcoef(car_subtracted, car_corrected)[0, 1]
+        ## Alternative method
+        ## find correaltion between each signal and the CAR.
+        # comment out when using method 1
         correlation = np.corrcoef(corr_data[key], car_corrected)[0, 1]
         row[f"{key}_corr"] = correlation
     #corr_data[label] = row[label]
@@ -85,8 +94,9 @@ df_copy['corr_mean_core'] = df_copy[corr_keys_].mean(axis=1)
 corr_keys_ = [f"{key}_corr" for key in keys_MNIST_EP]
 df_copy['corr_mean_all'] = df_copy[corr_keys_].mean(axis=1)
 
-fraction = 1
-sampled_indexes = df_copy[df_copy['corr_mean_core'] > 0.2].groupby(label).apply(lambda x: x.sample(frac=fraction)).index.get_level_values(1).tolist()
+## chnage factor depending upon CAR method used. typically 0.9 or above for method 1 CAR subtraction, 0.2 for method 2 for CAR correlation
+factor = 0.925 # 0.2
+sampled_indexes = df_copy[df_copy['corr_mean_core'] > factor].groupby(label).apply(lambda x: x.sample(frac=fraction)).index.get_level_values(1).tolist()
 sampled_df = df_copy.loc[sampled_indexes]
 
 ## split data to test train
@@ -109,6 +119,7 @@ print(labels.shape)
 
 x_train, x_test, y_train, y_test = train_test_split(train_data, labels, test_size=0.1, random_state=42)
 
+## use prefix list to save filenames for different test sceanrios
 prefix = ["data_4ch_90_32_4_","fil_corr_","data_4ch_epoch_filtered_324_0-2","data_4ch_epoch_filtered_324_0-85"]
 print(f"writing {root_dir}/{prefix[3]}{output_file}")
 data_out = {'x_train':x_train,'x_test':x_test,'y_train':y_train,'y_test':y_test} #{'x_test':train_data,'y_test':labels}
