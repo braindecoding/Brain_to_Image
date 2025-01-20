@@ -72,12 +72,13 @@ for idx, row in tqdm(sampled_df.iterrows()):
         ## CAR common avaerage reference
         ## Correlation = similarity between signal or subtracted signal and CAR
         ##
-        ## method used in project
+        ## method not used in project
         ## subtract the CAR from each signal and then find corelation with result and CAR
         # un comment for method 1
         #car_subtracted = corr_data[key] - car_corrected
         #correlation = np.corrcoef(car_subtracted, car_corrected)[0, 1]
-        ## Alternative method
+        ## Alternative method 2
+        ## method used in project
         ## find correaltion between each signal and the CAR.
         # comment out when using method 1
         correlation = np.corrcoef(corr_data[key], car_corrected)[0, 1]
@@ -94,7 +95,7 @@ df_copy['corr_mean_core'] = df_copy[corr_keys_].mean(axis=1)
 corr_keys_ = [f"{key}_corr" for key in keys_MNIST_EP]
 df_copy['corr_mean_all'] = df_copy[corr_keys_].mean(axis=1)
 
-## chnage factor depending upon CAR method used. typically 0.9 or above for method 1 CAR subtraction, 0.2 for method 2 for CAR correlation
+## chnage factor depending upon CAR method used. typically 0.9 or above for method 2 CAR subtraction, 0.2 for method 1 for CAR correlation
 factor = 0.925 # 0.2
 sampled_indexes = df_copy[df_copy['corr_mean_core'] > factor].groupby(label).apply(lambda x: x.sample(frac=fraction)).index.get_level_values(1).tolist()
 sampled_df = df_copy.loc[sampled_indexes]
