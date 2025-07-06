@@ -1,6 +1,13 @@
 import os
 import pickle
 import sys
+import tensorflow as tf
+
+# Force CPU usage to avoid cuDNN issues
+print("🔧 Forcing CPU usage to avoid cuDNN issues...")
+tf.config.set_visible_devices([], 'GPU')
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+print("✅ CPU-only mode enabled")
 
 from keras import optimizers
 from keras.callbacks import ModelCheckpoint,ReduceLROnPlateau
@@ -55,18 +62,37 @@ def save_model(model,name,path):
 
 run_id = "eeg_classifier_adm5"
 dataset = "MNIST_EP"
-root_dir = f"Datasets/MindBigData MNIST of Brain Digits/{dataset}"
-#root_dir = "data"
+#root_dir = f"Datasets/MindBigData MNIST of Brain Digits/{dataset}"
+root_dir = "data"
 data_file = "data_train_MindBigData2022_MNIST_EP.pkl"  # "data9032_train_MindBigData2022_MNIST_EP.pkl"
 #data_file = "data.pkl"
 model_save_dir = os.path.join(root_dir,"models")
-batch_size, num_epochs = 128, 150
+batch_size, num_epochs = 32, 100  # Reduced for CPU training
 
 print(f"Reading data file {root_dir}/{data_file}")
 eeg_data = pickle.load(open(f"{root_dir}/{data_file}", 'rb'), encoding='bytes')
 
-#x_train, y_train, x_test, y_test = eeg_data[b'x_train'], eeg_data[b'y_train'], eeg_data[b'x_test'], eeg_data[b'y_test']
+# Extract data
 x_train, y_train, x_test, y_test = eeg_data['x_train'], eeg_data['y_train'], eeg_data['x_val'], eeg_data['y_val']
+
+print(f"Data shapes:")
+print(f"x_train: {x_train.shape}")
+print(f"y_train: {y_train.shape}")
+print(f"x_test: {x_test.shape}")
+print(f"y_test: {y_test.shape}")
+
+# Add channel dimension if needed
+import numpy as np
+if len(x_train.shape) == 3:
+    x_train = np.expand_dims(x_train, axis=-1)
+    x_test = np.expand_dims(x_test, axis=-1)
+    print("Added channel dimension")
+
+# y_train and y_test are already in categorical format (one-hot), so we keep them as is
+print(f"Final data shapes:")
+print(f"x_train: {x_train.shape}")
+print(f"y_train: {y_train.shape}")
+print(f"Labels are already in categorical format")
 
 classifier = convolutional_encoder_model(x_train.shape[1], x_train.shape[2], 10)
 

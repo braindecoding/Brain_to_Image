@@ -61,17 +61,16 @@ class EEGClassifier(nn.Module):
         # Initial Batch Normalization
         self.bn1 = nn.BatchNorm2d(1)
         
-        # Convolutional layers - EXACT MATCH with Keras version
-        # Using explicit padding to avoid warnings with unusual kernel sizes
-        self.conv1 = nn.Conv2d(1, 128, kernel_size=(1, 4), padding=(0, 2))  # EEG_series_Conv2D
-        self.conv2 = nn.Conv2d(128, 64, kernel_size=(channels, 1), padding=(channels//2, 0))  # EEG_channel_Conv2D
+        # Convolutional layers - EXACT MATCH with SUCCESSFUL Keras version
+        self.conv1 = nn.Conv2d(1, 128, kernel_size=(1, 4), padding='same')  # EEG_series_Conv2D
+        self.conv2 = nn.Conv2d(128, 64, kernel_size=(channels, 1), padding='same')  # EEG_channel_Conv2D
         self.pool1 = nn.MaxPool2d(kernel_size=(1, 2))  # EEG_feature_pool1
 
-        # IMPORTANT: These kernel sizes match the Keras original exactly
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=(4, 25), padding=(2, 12))  # EEG_feature_Conv2D1
+        # SIMPLIFIED kernel sizes that worked in Keras
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=(3, 3), padding='same')  # EEG_feature_Conv2D1
         self.pool2 = nn.MaxPool2d(kernel_size=(1, 2))  # EEG_feature_pool2
 
-        self.conv4 = nn.Conv2d(64, 128, kernel_size=(50, 2), padding=(25, 1))  # EEG_feature_Conv2D2
+        self.conv4 = nn.Conv2d(64, 128, kernel_size=(3, 3), padding='same')  # EEG_feature_Conv2D2
         
         # Calculate flattened size after convolutions
         # This will be computed dynamically in forward pass
@@ -95,14 +94,16 @@ class EEGClassifier(nn.Module):
         self._initialize_weights()
     
     def _initialize_weights(self):
-        """Initialize model weights"""
+        """Initialize model weights to match Keras defaults"""
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                # Use Glorot/Xavier uniform like Keras default
+                init.xavier_uniform_(m.weight)
                 if m.bias is not None:
                     init.constant_(m.bias, 0)
             elif isinstance(m, nn.Linear):
-                init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                # Use Glorot/Xavier uniform like Keras default
+                init.xavier_uniform_(m.weight)
                 init.constant_(m.bias, 0)
             elif isinstance(m, nn.BatchNorm2d) or isinstance(m, nn.BatchNorm1d):
                 init.constant_(m.weight, 1)
@@ -203,24 +204,25 @@ class EEGClassifier(nn.Module):
         print("=" * 80)
 
 
-def convolutional_encoder_model(channels, observations, num_classes, verbose=False):
+def convolutional_encoder_model(channels, observations, num_classes, verbose=False, use_softmax=False):
     """
     Factory function to create EEG classifier (for compatibility with Keras version)
-    
+
     Args:
         channels: Number of EEG channels
         observations: Number of time observations
         num_classes: Number of output classes
         verbose: Whether to print model summary
-        
+        use_softmax: Whether to apply softmax to output (False for training with CrossEntropyLoss)
+
     Returns:
         model: EEGClassifier instance
     """
-    model = EEGClassifier(channels, observations, num_classes)
-    
+    model = EEGClassifier(channels, observations, num_classes, use_softmax=use_softmax)
+
     if verbose:
         model.summary()
-    
+
     return model
 
 

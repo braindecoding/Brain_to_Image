@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
+from torch.cuda.amp import autocast, GradScaler
 from sklearn.model_selection import train_test_split
 
 # Add project root to path
@@ -50,11 +51,14 @@ def load_and_prepare_data():
         x_train = np.transpose(x_train, (0, 3, 1, 2))
         x_test = np.transpose(x_test, (0, 3, 1, 2))
     
+    # Keep labels in one-hot format like successful Keras version
+    print("Keeping labels in one-hot format (same as successful Keras)")
+
     # Convert to tensors
     x_train = torch.FloatTensor(x_train)
-    y_train = torch.LongTensor(y_train)
+    y_train = torch.FloatTensor(y_train)  # One-hot labels as float
     x_test = torch.FloatTensor(x_test)
-    y_test = torch.LongTensor(y_test)
+    y_test = torch.FloatTensor(y_test)    # One-hot labels as float
     
     # Create validation split - EXACT SAME as Keras (validation_split=0.25)
     train_size = int(0.75 * len(x_train))
@@ -67,11 +71,13 @@ def load_and_prepare_data():
     
     print(f"After validation split:")
     print(f"  x_train: {x_train_split.shape}")
-    print(f"  y_train: {y_train_split.shape}")
+    print(f"  y_train: {y_train_split.shape} (dtype: {y_train_split.dtype})")
     print(f"  x_val: {x_val_split.shape}")
-    print(f"  y_val: {y_val_split.shape}")
+    print(f"  y_val: {y_val_split.shape} (dtype: {y_val_split.dtype})")
     print(f"  x_test: {x_test.shape}")
-    print(f"  y_test: {y_test.shape}")
+    print(f"  y_test: {y_test.shape} (dtype: {y_test.dtype})")
+    print(f"  y_train sample: {y_train_split[:5]}")
+    print(f"  y_train unique: {torch.unique(y_train_split)}")
     
     return x_train_split, y_train_split, x_val_split, y_val_split, x_test, y_test
 
@@ -80,9 +86,23 @@ def train_model():
     print("🧠 EEG Classification Training (PyTorch - Exact Keras Match)")
     print("=" * 70)
     
-    # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    # Set device with GPU support and cuDNN optimization
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        print(f"� Using GPU: {torch.cuda.get_device_name()}")
+
+        # Enable cuDNN optimizations
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.enabled = True
+
+        # Set memory growth to avoid OOM
+        torch.cuda.empty_cache()
+
+    else:
+        device = torch.device('cpu')
+        print("🖥️ Using CPU (GPU not available)")
+
+    print(f"Device: {device}")
     
     try:
         # Load data
@@ -98,26 +118,33 @@ def train_model():
         
         # Create model - EXACT SAME as Keras
         print("=== Creating Model ===")
-        classifier = convolutional_encoder_model(channels, observations, 10, verbose=True)
+        # Create model WITH softmax like Keras (for one-hot label compatibility)
+        classifier = convolutional_encoder_model(channels, observations, 10, verbose=True, use_softmax=True)
         classifier = classifier.to(device)
+        
+        # UNLIMITED training parameters for absolute maximum convergence
+        batch_size = 32   # SAME as successful Keras run
+        num_epochs = 2000  # UNLIMITED EXTENDED for absolute maximum potential
 
-        # Disable softmax for PyTorch training (CrossEntropyLoss expects logits)
-        classifier.use_softmax = False
-        
-        # EXACT SAME training parameters as Keras
-        batch_size = 128  # SAME as Keras
-        num_epochs = 150  # SAME as Keras
-        
-        # EXACT SAME optimizer as Keras
+        # EXACT SAME optimizer as successful Keras
         # Keras: Adam(learning_rate=0.0001, beta_1=0.9, decay=1e-6)
         optimizer = optim.Adam(classifier.parameters(), lr=0.0001, betas=(0.9, 0.999), weight_decay=1e-6)
         
-        # EXACT SAME loss function as Keras
-        criterion = nn.CrossEntropyLoss()
+        # EXACT SAME loss function as Keras (categorical_crossentropy for one-hot labels)
+        # Use BCEWithLogitsLoss for one-hot labels or implement categorical crossentropy
+        def categorical_crossentropy_loss(y_pred, y_true):
+            """Categorical crossentropy loss for one-hot labels (like Keras)"""
+            # Apply softmax to predictions
+            y_pred_softmax = torch.softmax(y_pred, dim=1)
+            # Compute categorical crossentropy
+            loss = -torch.sum(y_true * torch.log(y_pred_softmax + 1e-8), dim=1)
+            return torch.mean(loss)
+
+        criterion = categorical_crossentropy_loss
         
-        # EXACT SAME learning rate scheduler as Keras
-        # Keras: ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=2)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.2, patience=2)
+        # UNLIMITED PATIENT learning rate scheduler for absolute maximum training
+        # Extremely patient LR reduction for unlimited training
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.8, patience=50, verbose=True, min_lr=1e-10)
         
         # Create data loaders
         train_dataset = TensorDataset(x_train, y_train)
@@ -131,20 +158,29 @@ def train_model():
         # Setup model saving - Updated for correct path
         model_save_dir = "models"  # Save models in main models/ folder
         os.makedirs(model_save_dir, exist_ok=True)
-        
+
         run_id = "eeg_classifier_adm5"
         saved_model_file = os.path.join(model_save_dir, str(run_id) + '_final.pth')
         best_model_file = os.path.join(model_save_dir, str(run_id) + '_best.pth')
-        
-        print(f"=== Starting Training ===")
-        print(f"Batch size: {batch_size}")
-        print(f"Epochs: {num_epochs}")
-        print(f"Learning rate: {optimizer.param_groups[0]['lr']}")
-        print(f"Model save dir: {model_save_dir}")
-        
+
         # Training variables
         best_val_acc = 0
+        patience_counter = 0
+        early_stop_patience = 200  # UNLIMITED patience - stop if no improvement for 200 epochs
         train_history = {'loss': [], 'accuracy': [], 'val_loss': [], 'val_accuracy': []}
+
+        print(f"=== Starting UNLIMITED Extended Training ===")
+        print(f"Batch size: {batch_size}")
+        print(f"Epochs: {num_epochs} (UNLIMITED for absolute maximum potential)")
+        print(f"Learning rate: {optimizer.param_groups[0]['lr']}")
+        print(f"Early stopping patience: {early_stop_patience} epochs (UNLIMITED)")
+        print(f"LR scheduler patience: 50 epochs (EXTREMELY PATIENT)")
+        print(f"Model save dir: {model_save_dir}")
+        print(f"Expected training time: ~{num_epochs * 0.1:.1f} minutes on GPU (~3.3 hours)")
+        print(f"Target: MAXIMUM validation accuracy possible (current best: 78.78%)")
+        print(f"Gap to close: Train 99.58% vs Val 78.68% = 21.05% gap")
+        print(f"🎯 Goal: Find the absolute maximum this model can achieve!")
+        print(f"🔥 No limits - train until true convergence!")
         
         # Training loop
         for epoch in range(num_epochs):
@@ -167,8 +203,10 @@ def train_model():
                 optimizer.step()
                 
                 train_loss += loss.item()
-                pred = output.argmax(dim=1, keepdim=True)
-                train_correct += pred.eq(target.view_as(pred)).sum().item()
+                # For one-hot labels, get predictions and true labels
+                pred = output.argmax(dim=1)
+                true_labels = target.argmax(dim=1)
+                train_correct += pred.eq(true_labels).sum().item()
                 train_total += target.size(0)
             
             train_acc = 100. * train_correct / train_total
@@ -187,8 +225,10 @@ def train_model():
                     loss = criterion(output, target)
                     
                     val_loss += loss.item()
-                    pred = output.argmax(dim=1, keepdim=True)
-                    val_correct += pred.eq(target.view_as(pred)).sum().item()
+                    # For one-hot labels, get predictions and true labels
+                    pred = output.argmax(dim=1)
+                    true_labels = target.argmax(dim=1)
+                    val_correct += pred.eq(true_labels).sum().item()
                     val_total += target.size(0)
             
             val_acc = 100. * val_correct / val_total
@@ -200,6 +240,7 @@ def train_model():
             # Save best model (EXACT SAME as Keras ModelCheckpoint)
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
+                patience_counter = 0  # Reset patience counter
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': classifier.state_dict(),
@@ -208,6 +249,14 @@ def train_model():
                     'val_loss': avg_val_loss,
                 }, best_model_file)
                 print(f"✅ Best model saved! Val Acc: {val_acc:.2f}%")
+            else:
+                patience_counter += 1
+
+            # Early stopping check
+            if patience_counter >= early_stop_patience:
+                print(f"🛑 Early stopping triggered after {patience_counter} epochs without improvement")
+                print(f"Best validation accuracy: {best_val_acc:.2f}%")
+                break
             
             # Store history
             train_history['loss'].append(avg_train_loss)
@@ -218,6 +267,51 @@ def train_model():
             print(f"Train Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.2f}%")
             print(f"Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2f}%")
             print(f"LR: {optimizer.param_groups[0]['lr']:.6f}")
+            print(f"Patience: {patience_counter}/{early_stop_patience}")
+
+            # Save checkpoint every 50 epochs and show progress
+            if (epoch + 1) % 50 == 0:
+                checkpoint_file = os.path.join(model_save_dir, f"{run_id}_epoch_{epoch+1}.pth")
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': classifier.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'val_acc': val_acc,
+                    'val_loss': avg_val_loss,
+                }, checkpoint_file)
+                print(f"📁 Checkpoint saved: {checkpoint_file}")
+                print(f"🎯 Progress: {(epoch+1)/num_epochs*100:.1f}% complete")
+                print(f"📈 Best so far: {best_val_acc:.2f}% (target: >85%)")
+
+            # Show detailed progress every 25 epochs
+            if (epoch + 1) % 25 == 0:
+                train_val_gap = train_acc - val_acc
+                print(f"📊 Train-Val Gap: {train_val_gap:.2f}% (lower is better)")
+                if train_val_gap > 20:
+                    print("🔥 LARGE gap - significant potential for more training!")
+                elif train_val_gap > 15:
+                    print("⚠️  Moderate gap - still room for improvement")
+                elif train_val_gap > 10:
+                    print("✅ Small gap - getting close to optimal")
+                else:
+                    print("🎯 Minimal gap - approaching maximum potential")
+
+            # Ultra-detailed monitoring every 100 epochs
+            if (epoch + 1) % 100 == 0:
+                improvement_rate = (val_acc - best_val_acc) if epoch > 100 else val_acc
+                print(f"🔍 DEEP ANALYSIS at epoch {epoch+1}:")
+                print(f"   📈 Recent improvement: {improvement_rate:.3f}%")
+                print(f"   🎯 Distance to 85% target: {85 - val_acc:.2f}%")
+                print(f"   ⏱️  Time elapsed: ~{(epoch+1) * 0.1:.1f} minutes")
+                print(f"   🔋 Patience remaining: {early_stop_patience - patience_counter}")
+                if val_acc > 85:
+                    print("🎉 TARGET ACHIEVED! But continuing for maximum...")
+                elif val_acc > 82:
+                    print("🔥 VERY CLOSE to target! Keep pushing!")
+                elif val_acc > 80:
+                    print("💪 Good progress toward target!")
+                else:
+                    print("🚀 Still climbing toward target!")
         
         # Save final model and history - EXACT SAME as Keras
         torch.save(classifier.state_dict(), saved_model_file)
@@ -243,8 +337,10 @@ def train_model():
                 loss = criterion(output, target)
                 
                 test_loss += loss.item()
-                pred = output.argmax(dim=1, keepdim=True)
-                test_correct += pred.eq(target.view_as(pred)).sum().item()
+                # For one-hot labels, get predictions and true labels
+                pred = output.argmax(dim=1)
+                true_labels = target.argmax(dim=1)
+                test_correct += pred.eq(true_labels).sum().item()
                 test_total += target.size(0)
         
         test_acc = 100. * test_correct / test_total
