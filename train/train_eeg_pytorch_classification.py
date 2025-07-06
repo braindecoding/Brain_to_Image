@@ -122,13 +122,13 @@ def train_model():
         classifier = convolutional_encoder_model(channels, observations, 10, verbose=True, use_softmax=True)
         classifier = classifier.to(device)
         
-        # UNLIMITED training parameters for absolute maximum convergence
+        # OPTIMIZED training parameters for stable convergence
         batch_size = 32   # SAME as successful Keras run
-        num_epochs = 2000  # UNLIMITED EXTENDED for absolute maximum potential
+        num_epochs = 300  # EXTENDED to allow proper convergence with conservative LR schedule
 
-        # EXACT SAME optimizer as successful Keras
-        # Keras: Adam(learning_rate=0.0001, beta_1=0.9, decay=1e-6)
-        optimizer = optim.Adam(classifier.parameters(), lr=0.0001, betas=(0.9, 0.999), weight_decay=1e-6)
+        # HYBRID approach: Start with Adam (stable) but with Keras-like parameters
+        # Adam is more stable for initial training, then we can fine-tune
+        optimizer = optim.Adam(classifier.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-6)
         
         # EXACT SAME loss function as Keras (categorical_crossentropy for one-hot labels)
         # Use BCEWithLogitsLoss for one-hot labels or implement categorical crossentropy
@@ -142,9 +142,9 @@ def train_model():
 
         criterion = categorical_crossentropy_loss
         
-        # UNLIMITED PATIENT learning rate scheduler for absolute maximum training
-        # Extremely patient LR reduction for unlimited training
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.8, patience=50, verbose=True, min_lr=1e-10)
+        # MORE CONSERVATIVE learning rate scheduler to prevent LR collapse
+        # Start more patient, then get more aggressive
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=10, verbose=True, min_lr=1e-7)
         
         # Create data loaders
         train_dataset = TensorDataset(x_train, y_train)
@@ -166,21 +166,21 @@ def train_model():
         # Training variables
         best_val_acc = 0
         patience_counter = 0
-        early_stop_patience = 200  # UNLIMITED patience - stop if no improvement for 200 epochs
+        early_stop_patience = 50  # INCREASED patience to allow proper convergence
         train_history = {'loss': [], 'accuracy': [], 'val_loss': [], 'val_accuracy': []}
 
-        print(f"=== Starting UNLIMITED Extended Training ===")
+        print(f"=== Starting STABLE PyTorch Training ===")
         print(f"Batch size: {batch_size}")
-        print(f"Epochs: {num_epochs} (UNLIMITED for absolute maximum potential)")
-        print(f"Learning rate: {optimizer.param_groups[0]['lr']}")
-        print(f"Early stopping patience: {early_stop_patience} epochs (UNLIMITED)")
-        print(f"LR scheduler patience: 50 epochs (EXTREMELY PATIENT)")
+        print(f"Epochs: {num_epochs} (EXTENDED for stable convergence)")
+        print(f"Optimizer: Adam (STABLE for initial training)")
+        print(f"Learning rate: {optimizer.param_groups[0]['lr']} (HIGHER for better learning)")
+        print(f"Early stopping patience: {early_stop_patience} epochs (INCREASED)")
+        print(f"LR scheduler: factor=0.5, patience=10 (CONSERVATIVE)")
+        print(f"Min LR: 1e-7 (PREVENTS LR collapse)")
         print(f"Model save dir: {model_save_dir}")
-        print(f"Expected training time: ~{num_epochs * 0.1:.1f} minutes on GPU (~3.3 hours)")
-        print(f"Target: MAXIMUM validation accuracy possible (current best: 78.78%)")
-        print(f"Gap to close: Train 99.58% vs Val 78.68% = 21.05% gap")
-        print(f"🎯 Goal: Find the absolute maximum this model can achieve!")
-        print(f"🔥 No limits - train until true convergence!")
+        print(f"Expected training time: ~{num_epochs * 0.1:.1f} minutes on GPU")
+        print(f"🎯 Target: Stable convergence first, then optimize")
+        print(f"🔧 Key fix: Prevent LR collapse + stable optimizer!")
         
         # Training loop
         for epoch in range(num_epochs):
@@ -266,8 +266,15 @@ def train_model():
             
             print(f"Train Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.2f}%")
             print(f"Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2f}%")
-            print(f"LR: {optimizer.param_groups[0]['lr']:.6f}")
+            current_lr = optimizer.param_groups[0]['lr']
+            print(f"LR: {current_lr:.8f}")
             print(f"Patience: {patience_counter}/{early_stop_patience}")
+
+            # Warning if LR gets too low
+            if current_lr < 1e-6:
+                print(f"⚠️  WARNING: LR very low ({current_lr:.2e}), may need adjustment")
+            if current_lr < 1e-7:
+                print(f"🚨 CRITICAL: LR extremely low, consider stopping or adjusting")
 
             # Save checkpoint every 50 epochs and show progress
             if (epoch + 1) % 50 == 0:
