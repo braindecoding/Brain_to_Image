@@ -10,11 +10,46 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from torch.cuda.amp import autocast, GradScaler
 from sklearn.model_selection import train_test_split
+import torch.nn.functional as F
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.eegclassifier_pytorch import convolutional_encoder_model
+
+def eeg_data_augmentation(x, y, augment_factor=2):
+    """
+    Apply data augmentation techniques for EEG data
+    """
+    augmented_x = []
+    augmented_y = []
+
+    for i in range(len(x)):
+        # Original data
+        augmented_x.append(x[i])
+        augmented_y.append(y[i])
+
+        # Augmentation techniques
+        for _ in range(augment_factor):
+            sample = x[i].copy()
+
+            # 1. Add small amount of Gaussian noise (0.5% of signal std)
+            noise_std = np.std(sample) * 0.005
+            sample += np.random.normal(0, noise_std, sample.shape)
+
+            # 2. Small time shift (±1 sample)
+            shift = np.random.randint(-1, 2)
+            if shift != 0:
+                sample = np.roll(sample, shift, axis=-1)
+
+            # 3. Small amplitude scaling (±2%)
+            scale = np.random.uniform(0.98, 1.02)
+            sample *= scale
+
+            augmented_x.append(sample)
+            augmented_y.append(y[i])
+
+    return np.array(augmented_x), np.array(augmented_y)
 
 def load_and_prepare_data():
     """Load and prepare EEG data - EXACT SAME as Keras version"""
@@ -51,12 +86,17 @@ def load_and_prepare_data():
         x_train = np.transpose(x_train, (0, 3, 1, 2))
         x_test = np.transpose(x_test, (0, 3, 1, 2))
     
+    # Apply data augmentation to training data only
+    print("Applying EEG data augmentation to training data...")
+    x_train_aug, y_train_aug = eeg_data_augmentation(x_train, y_train, augment_factor=1)
+    print(f"Augmented training data: {x_train.shape} -> {x_train_aug.shape}")
+
     # Keep labels in one-hot format like successful Keras version
     print("Keeping labels in one-hot format (same as successful Keras)")
 
     # Convert to tensors
-    x_train = torch.FloatTensor(x_train)
-    y_train = torch.FloatTensor(y_train)  # One-hot labels as float
+    x_train = torch.FloatTensor(x_train_aug)
+    y_train = torch.FloatTensor(y_train_aug)  # One-hot labels as float
     x_test = torch.FloatTensor(x_test)
     y_test = torch.FloatTensor(y_test)    # One-hot labels as float
     
@@ -128,19 +168,23 @@ def train_model():
 
         # OPTIMIZED Adam with stronger regularization to reduce overfitting
         # Higher weight decay to improve generalization
-        optimizer = optim.Adam(classifier.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-4)
+        optimizer = optim.Adam(classifier.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=5e-4)
         
-        # EXACT SAME loss function as Keras (categorical_crossentropy for one-hot labels)
-        # Use BCEWithLogitsLoss for one-hot labels or implement categorical crossentropy
-        def categorical_crossentropy_loss(y_pred, y_true):
-            """Categorical crossentropy loss for one-hot labels (like Keras)"""
+        # IMPROVED loss function with label smoothing to reduce overconfidence
+        def categorical_crossentropy_with_label_smoothing(y_pred, y_true, smoothing=0.1):
+            """Categorical crossentropy with label smoothing for better generalization"""
             # Apply softmax to predictions
             y_pred_softmax = torch.softmax(y_pred, dim=1)
+
+            # Apply label smoothing
+            num_classes = y_true.shape[1]
+            y_true_smooth = y_true * (1 - smoothing) + smoothing / num_classes
+
             # Compute categorical crossentropy
-            loss = -torch.sum(y_true * torch.log(y_pred_softmax + 1e-8), dim=1)
+            loss = -torch.sum(y_true_smooth * torch.log(y_pred_softmax + 1e-8), dim=1)
             return torch.mean(loss)
 
-        criterion = categorical_crossentropy_loss
+        criterion = lambda pred, true: categorical_crossentropy_with_label_smoothing(pred, true, smoothing=0.1)
         
         # MINIMAL learning rate reduction to maintain learning capability
         # Keep LR high enough to continue improving generalization
@@ -169,19 +213,21 @@ def train_model():
         early_stop_patience = 75  # FURTHER INCREASED to allow gap reduction
         train_history = {'loss': [], 'accuracy': [], 'val_loss': [], 'val_accuracy': []}
 
-        print(f"=== Starting GAP-REDUCTION PyTorch Training ===")
+        print(f"=== Starting ADVANCED GAP-REDUCTION Training ===")
         print(f"Batch size: {batch_size}")
         print(f"Epochs: {num_epochs} (EXTENDED to close train-val gap)")
-        print(f"Optimizer: Adam with stronger regularization")
+        print(f"Optimizer: Adam with enhanced regularization")
         print(f"Learning rate: {optimizer.param_groups[0]['lr']} (MAINTAINED for gap reduction)")
-        print(f"Weight decay: 1e-4 (INCREASED for better generalization)")
+        print(f"Weight decay: 5e-4 (FURTHER INCREASED for better generalization)")
+        print(f"Data augmentation: 2x training data (noise + time shift + scaling)")
+        print(f"Label smoothing: 0.1 (reduces overconfidence)")
         print(f"Early stopping patience: {early_stop_patience} epochs (VERY PATIENT)")
         print(f"LR scheduler: factor=0.8, patience=25 (MINIMAL reduction)")
         print(f"Min LR: 1e-4 (KEEPS LR HIGH for continued learning)")
         print(f"Model save dir: {model_save_dir}")
         print(f"Expected training time: ~{num_epochs * 0.1:.1f} minutes on GPU")
-        print(f"🎯 Target: Close 26% train-val gap (current best: 72.93%)")
-        print(f"🔧 Key fix: Maintain high LR + stronger regularization!")
+        print(f"🎯 Target: Close 24% train-val gap (current best: 75.55%)")
+        print(f"🔧 Advanced techniques: Data Aug + Label Smoothing + Strong Regularization!")
         
         # Training loop
         for epoch in range(num_epochs):
