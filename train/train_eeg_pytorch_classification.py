@@ -122,13 +122,13 @@ def train_model():
         classifier = convolutional_encoder_model(channels, observations, 10, verbose=True, use_softmax=True)
         classifier = classifier.to(device)
         
-        # OPTIMIZED training parameters for stable convergence
+        # EXTENDED training parameters to close train-val gap
         batch_size = 32   # SAME as successful Keras run
-        num_epochs = 300  # EXTENDED to allow proper convergence with conservative LR schedule
+        num_epochs = 500  # FURTHER EXTENDED to allow gap reduction
 
-        # HYBRID approach: Start with Adam (stable) but with Keras-like parameters
-        # Adam is more stable for initial training, then we can fine-tune
-        optimizer = optim.Adam(classifier.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-6)
+        # OPTIMIZED Adam with stronger regularization to reduce overfitting
+        # Higher weight decay to improve generalization
+        optimizer = optim.Adam(classifier.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=1e-4)
         
         # EXACT SAME loss function as Keras (categorical_crossentropy for one-hot labels)
         # Use BCEWithLogitsLoss for one-hot labels or implement categorical crossentropy
@@ -142,9 +142,9 @@ def train_model():
 
         criterion = categorical_crossentropy_loss
         
-        # MORE CONSERVATIVE learning rate scheduler to prevent LR collapse
-        # Start more patient, then get more aggressive
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=10, verbose=True, min_lr=1e-7)
+        # MINIMAL learning rate reduction to maintain learning capability
+        # Keep LR high enough to continue improving generalization
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.8, patience=25, verbose=True, min_lr=1e-4)
         
         # Create data loaders
         train_dataset = TensorDataset(x_train, y_train)
@@ -166,21 +166,22 @@ def train_model():
         # Training variables
         best_val_acc = 0
         patience_counter = 0
-        early_stop_patience = 50  # INCREASED patience to allow proper convergence
+        early_stop_patience = 75  # FURTHER INCREASED to allow gap reduction
         train_history = {'loss': [], 'accuracy': [], 'val_loss': [], 'val_accuracy': []}
 
-        print(f"=== Starting STABLE PyTorch Training ===")
+        print(f"=== Starting GAP-REDUCTION PyTorch Training ===")
         print(f"Batch size: {batch_size}")
-        print(f"Epochs: {num_epochs} (EXTENDED for stable convergence)")
-        print(f"Optimizer: Adam (STABLE for initial training)")
-        print(f"Learning rate: {optimizer.param_groups[0]['lr']} (HIGHER for better learning)")
-        print(f"Early stopping patience: {early_stop_patience} epochs (INCREASED)")
-        print(f"LR scheduler: factor=0.5, patience=10 (CONSERVATIVE)")
-        print(f"Min LR: 1e-7 (PREVENTS LR collapse)")
+        print(f"Epochs: {num_epochs} (EXTENDED to close train-val gap)")
+        print(f"Optimizer: Adam with stronger regularization")
+        print(f"Learning rate: {optimizer.param_groups[0]['lr']} (MAINTAINED for gap reduction)")
+        print(f"Weight decay: 1e-4 (INCREASED for better generalization)")
+        print(f"Early stopping patience: {early_stop_patience} epochs (VERY PATIENT)")
+        print(f"LR scheduler: factor=0.8, patience=25 (MINIMAL reduction)")
+        print(f"Min LR: 1e-4 (KEEPS LR HIGH for continued learning)")
         print(f"Model save dir: {model_save_dir}")
         print(f"Expected training time: ~{num_epochs * 0.1:.1f} minutes on GPU")
-        print(f"🎯 Target: Stable convergence first, then optimize")
-        print(f"🔧 Key fix: Prevent LR collapse + stable optimizer!")
+        print(f"🎯 Target: Close 26% train-val gap (current best: 72.93%)")
+        print(f"🔧 Key fix: Maintain high LR + stronger regularization!")
         
         # Training loop
         for epoch in range(num_epochs):
@@ -293,15 +294,24 @@ def train_model():
             # Show detailed progress every 25 epochs
             if (epoch + 1) % 25 == 0:
                 train_val_gap = train_acc - val_acc
-                print(f"📊 Train-Val Gap: {train_val_gap:.2f}% (lower is better)")
-                if train_val_gap > 20:
-                    print("🔥 LARGE gap - significant potential for more training!")
+                print(f"📊 Train-Val Gap: {train_val_gap:.2f}% (target: <15%)")
+                print(f"📈 Gap trend: Previous best gap was ~26%, current: {train_val_gap:.2f}%")
+                if train_val_gap > 25:
+                    print("🔥 VERY LARGE gap - need more regularization or training!")
+                elif train_val_gap > 20:
+                    print("🔥 LARGE gap - significant room for improvement")
                 elif train_val_gap > 15:
-                    print("⚠️  Moderate gap - still room for improvement")
+                    print("⚠️  Moderate gap - getting better")
                 elif train_val_gap > 10:
-                    print("✅ Small gap - getting close to optimal")
+                    print("✅ Good gap - approaching target")
                 else:
-                    print("🎯 Minimal gap - approaching maximum potential")
+                    print("🎯 Excellent gap - near optimal generalization")
+
+                # LR status
+                if current_lr > 1e-4:
+                    print(f"💪 LR still healthy: {current_lr:.6f}")
+                else:
+                    print(f"⚠️  LR getting low: {current_lr:.6f} - may limit improvement")
 
             # Ultra-detailed monitoring every 100 epochs
             if (epoch + 1) % 100 == 0:
