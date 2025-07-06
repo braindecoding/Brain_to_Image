@@ -1,5 +1,7 @@
 *.pyc
 *.ipynb_checkpoints
 *.h5
+*.gz
 *.pth
+Datasets/
 *.pkl
