@@ -1,5 +1,6 @@
 # Brain to Image
 
+
 This repository is a collection of scripts and code used in my Master's project. 
 
 ### Abstract 
@@ -33,3 +34,10 @@ in notebooks the pipeline_data not book shows how this is done with some comment
 ## Training models
 
 apply filtering, artifact removal and CAR, save test/train split as pickle file. Use the train scripts to laod the data and train GAN.
+
+
+# Exact same as Keras version
+model = convolutional_encoder_model(9, 32, 10, verbose=True)
+
+# Or with PyTorch class directly
+model = EEGClassifier(9, 32, 10, dropout_rate=0.1, l2_reg=0.015, use_softmax=True)
