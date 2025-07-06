@@ -62,15 +62,16 @@ class EEGClassifier(nn.Module):
         self.bn1 = nn.BatchNorm2d(1)
         
         # Convolutional layers - EXACT MATCH with Keras version
-        self.conv1 = nn.Conv2d(1, 128, kernel_size=(1, 4), padding='same')  # EEG_series_Conv2D
-        self.conv2 = nn.Conv2d(128, 64, kernel_size=(channels, 1), padding='same')  # EEG_channel_Conv2D
+        # Using explicit padding to avoid warnings with unusual kernel sizes
+        self.conv1 = nn.Conv2d(1, 128, kernel_size=(1, 4), padding=(0, 2))  # EEG_series_Conv2D
+        self.conv2 = nn.Conv2d(128, 64, kernel_size=(channels, 1), padding=(channels//2, 0))  # EEG_channel_Conv2D
         self.pool1 = nn.MaxPool2d(kernel_size=(1, 2))  # EEG_feature_pool1
 
         # IMPORTANT: These kernel sizes match the Keras original exactly
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=(4, 25), padding='same')  # EEG_feature_Conv2D1
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=(4, 25), padding=(2, 12))  # EEG_feature_Conv2D1
         self.pool2 = nn.MaxPool2d(kernel_size=(1, 2))  # EEG_feature_pool2
 
-        self.conv4 = nn.Conv2d(64, 128, kernel_size=(50, 2), padding='same')  # EEG_feature_Conv2D2
+        self.conv4 = nn.Conv2d(64, 128, kernel_size=(50, 2), padding=(25, 1))  # EEG_feature_Conv2D2
         
         # Calculate flattened size after convolutions
         # This will be computed dynamically in forward pass

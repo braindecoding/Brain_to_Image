@@ -19,14 +19,14 @@ def load_and_prepare_data():
     """Load and prepare EEG data - EXACT SAME as Keras version"""
     print("=== Loading Data (Exact Keras Match) ===")
     
-    # EXACT SAME paths as Keras version
+    # Updated paths to match actual data location
     run_id = "eeg_classifier_adm5"
     dataset = "MNIST_EP"
-    root_dir = f"Datasets/MindBigData MNIST of Brain Digits/{dataset}"
+    root_dir = "data"  # Data is in data/ folder
     data_file = "data_train_MindBigData2022_MNIST_EP.pkl"
-    
+
     print(f"Reading data file {root_dir}/{data_file}")
-    
+
     if not os.path.exists(f"{root_dir}/{data_file}"):
         raise FileNotFoundError(f"Data file not found: {root_dir}/{data_file}")
     
@@ -73,7 +73,7 @@ def load_and_prepare_data():
     print(f"  x_test: {x_test.shape}")
     print(f"  y_test: {y_test.shape}")
     
-    return x_train_split, y_train_split, x_val_split, y_val_split, x_test, y_test, root_dir
+    return x_train_split, y_train_split, x_val_split, y_val_split, x_test, y_test
 
 def train_model():
     """Main training function - EXACT SAME as Keras version"""
@@ -86,7 +86,7 @@ def train_model():
     
     try:
         # Load data
-        x_train, y_train, x_val, y_val, x_test, y_test, root_dir = load_and_prepare_data()
+        x_train, y_train, x_val, y_val, x_test, y_test = load_and_prepare_data()
         
         # Get data dimensions - EXACT SAME as Keras
         channels = x_train.shape[2]  # x_train.shape[1] in Keras
@@ -100,6 +100,9 @@ def train_model():
         print("=== Creating Model ===")
         classifier = convolutional_encoder_model(channels, observations, 10, verbose=True)
         classifier = classifier.to(device)
+
+        # Disable softmax for PyTorch training (CrossEntropyLoss expects logits)
+        classifier.use_softmax = False
         
         # EXACT SAME training parameters as Keras
         batch_size = 128  # SAME as Keras
@@ -125,8 +128,8 @@ def train_model():
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
         
-        # Setup model saving - EXACT SAME as Keras
-        model_save_dir = os.path.join(root_dir, "models")
+        # Setup model saving - Updated for correct path
+        model_save_dir = "models"  # Save models in main models/ folder
         os.makedirs(model_save_dir, exist_ok=True)
         
         run_id = "eeg_classifier_adm5"
@@ -154,7 +157,7 @@ def train_model():
             train_correct = 0
             train_total = 0
             
-            for batch_idx, (data, target) in enumerate(train_loader):
+            for _, (data, target) in enumerate(train_loader):
                 data, target = data.to(device), target.to(device)
                 
                 optimizer.zero_grad()
