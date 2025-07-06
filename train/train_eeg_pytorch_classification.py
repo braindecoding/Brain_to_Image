@@ -86,9 +86,9 @@ def load_and_prepare_data():
         x_train = np.transpose(x_train, (0, 3, 1, 2))
         x_test = np.transpose(x_test, (0, 3, 1, 2))
     
-    # Apply data augmentation to training data only
-    print("Applying EEG data augmentation to training data...")
-    x_train_aug, y_train_aug = eeg_data_augmentation(x_train, y_train, augment_factor=1)
+    # Apply MODERATE data augmentation to training data only
+    print("Applying MODERATE EEG data augmentation to training data...")
+    x_train_aug, y_train_aug = eeg_data_augmentation(x_train, y_train, augment_factor=2)  # MODERATE augmentation
     print(f"Augmented training data: {x_train.shape} -> {x_train_aug.shape}")
 
     # Keep labels in one-hot format like successful Keras version
@@ -162,21 +162,21 @@ def train_model():
         classifier = convolutional_encoder_model(channels, observations, 10, verbose=True, use_softmax=True)
         classifier = classifier.to(device)
         
-        # EXTENDED training parameters to close train-val gap
-        batch_size = 32   # SAME as successful Keras run
-        num_epochs = 500  # FURTHER EXTENDED to allow gap reduction
+        # BALANCED REGULARIZATION training parameters
+        batch_size = 32   # OPTIMAL batch size (same as successful Keras)
+        num_epochs = 700  # EXTENDED epochs to reach 85% target
 
-        # OPTIMIZED Adam with stronger regularization to reduce overfitting
-        # Higher weight decay to improve generalization
+        # MODERATE REGULARIZATION Adam optimizer
+        # Balanced weight decay for good generalization without underfitting
         optimizer = optim.Adam(classifier.parameters(), lr=0.001, betas=(0.9, 0.999), weight_decay=5e-4)
-        
-        # IMPROVED loss function with label smoothing to reduce overconfidence
+
+        # MODERATE loss function with balanced label smoothing
         def categorical_crossentropy_with_label_smoothing(y_pred, y_true, smoothing=0.1):
-            """Categorical crossentropy with label smoothing for better generalization"""
+            """Categorical crossentropy with MODERATE label smoothing for balanced learning"""
             # Apply softmax to predictions
             y_pred_softmax = torch.softmax(y_pred, dim=1)
 
-            # Apply label smoothing
+            # Apply moderate label smoothing
             num_classes = y_true.shape[1]
             y_true_smooth = y_true * (1 - smoothing) + smoothing / num_classes
 
@@ -185,10 +185,9 @@ def train_model():
             return torch.mean(loss)
 
         criterion = lambda pred, true: categorical_crossentropy_with_label_smoothing(pred, true, smoothing=0.1)
-        
-        # MINIMAL learning rate reduction to maintain learning capability
-        # Keep LR high enough to continue improving generalization
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.8, patience=25, verbose=True, min_lr=1e-4)
+
+        # MODERATE learning rate reduction for balanced learning
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.7, patience=20, verbose=True, min_lr=1e-5)
         
         # Create data loaders
         train_dataset = TensorDataset(x_train, y_train)
@@ -207,27 +206,27 @@ def train_model():
         saved_model_file = os.path.join(model_save_dir, str(run_id) + '_final.pth')
         best_model_file = os.path.join(model_save_dir, str(run_id) + '_best.pth')
 
-        # Training variables
+        # Training variables with BALANCED early stopping
         best_val_acc = 0
         patience_counter = 0
-        early_stop_patience = 75  # FURTHER INCREASED to allow gap reduction
+        early_stop_patience = 50  # MODERATE early stopping for balanced learning
         train_history = {'loss': [], 'accuracy': [], 'val_loss': [], 'val_accuracy': []}
 
-        print(f"=== Starting ADVANCED GAP-REDUCTION Training ===")
-        print(f"Batch size: {batch_size}")
-        print(f"Epochs: {num_epochs} (EXTENDED to close train-val gap)")
-        print(f"Optimizer: Adam with enhanced regularization")
-        print(f"Learning rate: {optimizer.param_groups[0]['lr']} (MAINTAINED for gap reduction)")
-        print(f"Weight decay: 5e-4 (FURTHER INCREASED for better generalization)")
-        print(f"Data augmentation: 2x training data (noise + time shift + scaling)")
-        print(f"Label smoothing: 0.1 (reduces overconfidence)")
-        print(f"Early stopping patience: {early_stop_patience} epochs (VERY PATIENT)")
-        print(f"LR scheduler: factor=0.8, patience=25 (MINIMAL reduction)")
-        print(f"Min LR: 1e-4 (KEEPS LR HIGH for continued learning)")
+        print(f"=== Starting BALANCED REGULARIZATION Training ===")
+        print(f"Batch size: {batch_size} (OPTIMAL size matching successful Keras)")
+        print(f"Epochs: {num_epochs} (EXTENDED to reach 85% target)")
+        print(f"Optimizer: Adam with BALANCED regularization")
+        print(f"Learning rate: {optimizer.param_groups[0]['lr']} (RESTORED for good learning)")
+        print(f"Weight decay: 5e-4 (MODERATE regularization)")
+        print(f"Data augmentation: 3x training data (BALANCED noise + time shift + scaling)")
+        print(f"Label smoothing: 0.1 (MODERATE smoothing for balanced learning)")
+        print(f"Early stopping patience: {early_stop_patience} epochs (BALANCED patience)")
+        print(f"LR scheduler: factor=0.7, patience=20 (MODERATE reduction)")
+        print(f"Min LR: 1e-5 (REASONABLE minimum)")
         print(f"Model save dir: {model_save_dir}")
         print(f"Expected training time: ~{num_epochs * 0.1:.1f} minutes on GPU")
-        print(f"🎯 Target: Close 24% train-val gap (current best: 75.55%)")
-        print(f"🔧 Advanced techniques: Data Aug + Label Smoothing + Strong Regularization!")
+        print(f"🎯 Target: Train 90-95%, Val 80-85%, Gap <10%")
+        print(f"🔧 BALANCED techniques: Moderate Reg + Balanced Aug + Smart Early Stop!")
         
         # Training loop
         for epoch in range(num_epochs):

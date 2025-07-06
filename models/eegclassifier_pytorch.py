@@ -45,7 +45,7 @@ class EEGClassifier(nn.Module):
     - Extracts 128-dim latent features for GAN input
     """
     
-    def __init__(self, channels, observations, num_classes=10, dropout_rate=0.1, l2_reg=0.015, use_softmax=False):
+    def __init__(self, channels, observations, num_classes=10, dropout_rate=0.3, l2_reg=0.015, use_softmax=False):
         super(EEGClassifier, self).__init__()
         
         self.channels = channels
@@ -61,31 +61,36 @@ class EEGClassifier(nn.Module):
         # Initial Batch Normalization
         self.bn1 = nn.BatchNorm2d(1)
         
-        # Convolutional layers - EXACT MATCH with SUCCESSFUL Keras version
+        # Convolutional layers with MODERATE dropout for balanced regularization
         self.conv1 = nn.Conv2d(1, 128, kernel_size=(1, 4), padding='same')  # EEG_series_Conv2D
+        self.conv_dropout1 = nn.Dropout2d(0.1)  # MODERATE spatial dropout after conv1
+
         self.conv2 = nn.Conv2d(128, 64, kernel_size=(channels, 1), padding='same')  # EEG_channel_Conv2D
         self.pool1 = nn.MaxPool2d(kernel_size=(1, 2))  # EEG_feature_pool1
+        self.conv_dropout2 = nn.Dropout2d(0.1)  # MODERATE spatial dropout after pool1
 
         # SIMPLIFIED kernel sizes that worked in Keras
         self.conv3 = nn.Conv2d(64, 64, kernel_size=(3, 3), padding='same')  # EEG_feature_Conv2D1
         self.pool2 = nn.MaxPool2d(kernel_size=(1, 2))  # EEG_feature_pool2
+        self.conv_dropout3 = nn.Dropout2d(0.15)  # MODERATE spatial dropout after pool2
 
         self.conv4 = nn.Conv2d(64, 128, kernel_size=(3, 3), padding='same')  # EEG_feature_Conv2D2
+        self.conv_dropout4 = nn.Dropout2d(0.15)  # MODERATE spatial dropout after conv4
         
         # Calculate flattened size after convolutions
         # This will be computed dynamically in forward pass
         self.flatten_size = None
         
-        # Dense layers
+        # Dense layers with MODERATE dropout for balanced regularization
         self.bn2 = nn.BatchNorm1d(512)  # Will be adjusted based on actual flatten size
         self.fc1 = nn.Linear(self.flatten_size or 1024, 512)  # EEG_feature_FC512
-        self.dropout1 = nn.Dropout(dropout_rate)
-        
+        self.dropout1 = nn.Dropout(dropout_rate)  # Now 0.3 for balanced learning
+
         self.fc2 = nn.Linear(512, 256)  # EEG_feature_FC256
-        self.dropout2 = nn.Dropout(dropout_rate)
-        
+        self.dropout2 = nn.Dropout(dropout_rate)  # Now 0.3 for balanced learning
+
         self.fc3 = nn.Linear(256, 128)  # EEG_feature_FC128 (latent space)
-        self.dropout3 = nn.Dropout(dropout_rate)
+        self.dropout3 = nn.Dropout(dropout_rate)  # Now 0.3 for balanced learning
         
         self.bn3 = nn.BatchNorm1d(128)
         self.fc_out = nn.Linear(128, num_classes)  # EEG_Class_Labels (L2 reg applied in optimizer)
@@ -123,15 +128,20 @@ class EEGClassifier(nn.Module):
         # Input batch normalization
         x = self.bn1(x)
         
-        # Convolutional layers
+        # Convolutional layers with dropout for anti-overfitting
         x = F.relu(self.conv1(x))
+        x = self.conv_dropout1(x)  # Apply spatial dropout
+
         x = F.relu(self.conv2(x))
         x = self.pool1(x)
-        
+        x = self.conv_dropout2(x)  # Apply spatial dropout
+
         x = F.relu(self.conv3(x))
         x = self.pool2(x)
-        
+        x = self.conv_dropout3(x)  # Apply spatial dropout
+
         x = F.relu(self.conv4(x))
+        x = self.conv_dropout4(x)  # Apply spatial dropout
         
         # Flatten
         batch_size = x.size(0)
@@ -216,9 +226,10 @@ def convolutional_encoder_model(channels, observations, num_classes, verbose=Fal
         use_softmax: Whether to apply softmax to output (False for training with CrossEntropyLoss)
 
     Returns:
-        model: EEGClassifier instance
+        model: EEGClassifier instance with ANTI-OVERFITTING configuration
     """
-    model = EEGClassifier(channels, observations, num_classes, use_softmax=use_softmax)
+    # Use MODERATE dropout rate for balanced regularization
+    model = EEGClassifier(channels, observations, num_classes, dropout_rate=0.3, use_softmax=use_softmax)
 
     if verbose:
         model.summary()
