@@ -55,8 +55,8 @@ def save_model(model,name,path):
 
 run_id = "eeg_classifier_adm5"
 dataset = "MNIST_EP"
-root_dir = f"Datasets/MindBigData MNIST of Brain Digits/{dataset}"
-#root_dir = "data"
+#root_dir = f"Datasets/MindBigData MNIST of Brain Digits/{dataset}"
+root_dir = "data"
 data_file = "data_train_MindBigData2022_MNIST_EP.pkl"  # "data9032_train_MindBigData2022_MNIST_EP.pkl"
 #data_file = "data.pkl"
 model_save_dir = os.path.join(root_dir,"models")
