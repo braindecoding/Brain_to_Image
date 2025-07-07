@@ -1,3 +1,13 @@
+EEG Signals (88.56% accuracy)
+    ↓
+Digit Predictions (0-9)
+    ↓
+Template Captions ("A handwritten digit X")
+    ↓
+Pure CLIP (Frozen) → Rich 512-dim Embeddings (similarity 3.7+)
+    ↓
+CLIP Decoder → Reconstructed 28x28 MNIST Images ✅
+
 🧠 Pipeline Flow:
 EEG → Digit Prediction
 EEGInferencer loads trained PyTorch EEG model
