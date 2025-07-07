@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 
 """
-Pre-trained CLIP Training for MNIST Digits
+CLIP Training with Pre-trained ViT-base-MNIST
 
 Purpose:
-    Fine-tune pre-trained OpenAI CLIP ViT-B/32 for MNIST digits
-    Much faster convergence and better performance than training from scratch
+    Train CLIP model using pre-trained ViT-base-MNIST as image encoder
+    Should achieve much better performance since ViT is already trained on MNIST
 
 Pipeline:
-    1. Load pre-trained CLIP ViT-B/32
-    2. Adapt for MNIST: 28x28 → 224x224, grayscale → RGB
-    3. Fine-tune with digit captions using contrastive learning
+    1. Load pre-trained ViT-base-MNIST (already knows MNIST digits)
+    2. Add text encoder for digit captions
+    3. Train with contrastive learning for image-text alignment
     4. Output: High-quality 512-dim aligned embeddings
 
 Author: Brain-to-Image Pipeline
 Date: 07/07/2024
-Version: v2.0 (Pre-trained)
+Version: v3.0 (ViT-MNIST Transfer Learning)
 
 Usage:
-    python train/train_clip_pretrained_mnist.py
+    python train/train_clip_vit_mnist.py
 """
 
 import os
@@ -29,25 +29,51 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 import numpy as np
 from tqdm import tqdm
-import clip
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models.clip_pretrained_mnist import CLIPPretrainedMNIST
-import clip
+from models.clip_vit_mnist_pretrained import CLIPViTMNIST
 from models.caption_generator import DigitCaptionGenerator
 from utils.mnist_loader import MNISTLoader
 
-class MNISTCLIPPretrainedDataset(Dataset):
-    """
-    Dataset for pre-trained CLIP fine-tuning with MNIST images and captions
-    """
+class SimpleTokenizer:
+    """Simple tokenizer for digit captions"""
+    
+    def __init__(self):
+        self.vocab = {
+            '<PAD>': 0, '<START>': 1, '<END>': 2,
+            'a': 3, 'handwritten': 4, 'digit': 5,
+            'zero': 6, 'one': 7, 'two': 8, 'three': 9, 'four': 10,
+            'five': 11, 'six': 12, 'seven': 13, 'eight': 14, 'nine': 15,
+            'the': 16, 'number': 17, 'written': 18
+        }
+        self.vocab_size = len(self.vocab)
+    
+    def encode(self, text: str, max_length: int = 20):
+        """Encode text to token IDs"""
+        tokens = ['<START>'] + text.lower().split() + ['<END>']
+        token_ids = []
+        for token in tokens:
+            if token in self.vocab:
+                token_ids.append(self.vocab[token])
+        
+        # Pad or truncate
+        if len(token_ids) > max_length:
+            token_ids = token_ids[:max_length]
+        else:
+            token_ids.extend([self.vocab['<PAD>']] * (max_length - len(token_ids)))
+        
+        return torch.tensor(token_ids, dtype=torch.long)
+
+class MNISTCLIPViTDataset(Dataset):
+    """Dataset for CLIP training with ViT-base-MNIST"""
     
     def __init__(self, mnist_loader: MNISTLoader, caption_generator: DigitCaptionGenerator, 
-                 split: str = 'train', samples_per_epoch: int = 10000):
+                 tokenizer: SimpleTokenizer, split: str = 'train', samples_per_epoch: int = 10000):
         self.mnist_loader = mnist_loader
         self.caption_generator = caption_generator
+        self.tokenizer = tokenizer
         self.split = split
         self.samples_per_epoch = samples_per_epoch
         
@@ -68,51 +94,34 @@ class MNISTCLIPPretrainedDataset(Dataset):
         else:
             caption = self.caption_generator.generate_caption(digit)
         
+        # Tokenize caption
+        text_tokens = self.tokenizer.encode(caption)
+        
         return {
             'image': image,
+            'text_tokens': text_tokens,
             'caption': caption,
             'digit': digit
         }
 
 def contrastive_loss(image_features, text_features, logit_scale, labels=None):
-    """Compute contrastive loss (InfoNCE) for CLIP training with stability checks"""
+    """Compute contrastive loss (InfoNCE) for CLIP training"""
     batch_size = image_features.shape[0]
-
-    # Ensure same dtype for all tensors
-    image_features = image_features.float()
-    text_features = text_features.float()
-    logit_scale = logit_scale.float()
-
-    # VERY conservative logit_scale clipping to prevent NaN
-    logit_scale = torch.clamp(logit_scale, max=5.0)  # Much lower limit for stability
-
+    
     # Compute similarity matrix
     similarity = logit_scale * image_features @ text_features.T
-
-    # Check for NaN/Inf in similarity matrix
-    if torch.isnan(similarity).any() or torch.isinf(similarity).any():
-        print(f"⚠️ NaN/Inf detected in similarity matrix!")
-        print(f"logit_scale: {logit_scale.item()}")
-        print(f"image_features range: {image_features.min().item():.4f} to {image_features.max().item():.4f}")
-        print(f"text_features range: {text_features.min().item():.4f} to {text_features.max().item():.4f}")
-        return torch.tensor(0.0, device=image_features.device, requires_grad=True)
-
+    
     # Create labels (diagonal should be positive pairs)
     if labels is None:
         labels = torch.arange(batch_size, device=image_features.device)
-
+    
     # Compute cross-entropy loss for both directions
     loss_i2t = nn.CrossEntropyLoss()(similarity, labels)
     loss_t2i = nn.CrossEntropyLoss()(similarity.T, labels)
-
-    # Check for NaN in losses
-    if torch.isnan(loss_i2t) or torch.isnan(loss_t2i):
-        print(f"⚠️ NaN detected in cross-entropy loss!")
-        return torch.tensor(0.0, device=image_features.device, requires_grad=True)
-
+    
     # Average both losses
     loss = (loss_i2t + loss_t2i) / 2
-
+    
     return loss
 
 def train_epoch(model, dataloader, optimizer, device, epoch):
@@ -126,15 +135,10 @@ def train_epoch(model, dataloader, optimizer, device, epoch):
     for batch_idx, batch in enumerate(progress_bar):
         # Move to device
         images = batch['image'].to(device)
-        captions = batch['caption']
-        
-        # Tokenize captions using CLIP tokenizer
-        text_tokens = clip.tokenize(captions).to(device)
+        text_tokens = batch['text_tokens'].to(device)
         
         # Forward pass
         optimizer.zero_grad()
-        
-        # Disable mixed precision to prevent NaN loss
         image_features, text_features, logit_scale = model(images, text_tokens)
         loss = contrastive_loss(image_features, text_features, logit_scale)
         
@@ -171,13 +175,9 @@ def validate_model(model, dataloader, device):
     with torch.no_grad():
         for batch in dataloader:
             images = batch['image'].to(device)
-            captions = batch['caption']
-            
-            # Tokenize captions
-            text_tokens = clip.tokenize(captions).to(device)
+            text_tokens = batch['text_tokens'].to(device)
             
             # Forward pass
-            # Disable mixed precision to prevent NaN loss
             image_features, text_features, logit_scale = model(images, text_tokens)
             loss = contrastive_loss(image_features, text_features, logit_scale)
             
@@ -204,7 +204,7 @@ def validate_model(model, dataloader, device):
 
 def main():
     """Main training function"""
-    print("🚀 Starting HYBRID CLIP Training (ViT-base-MNIST + CLIP Text)")
+    print("🚀 Starting CLIP Training with Pre-trained ViT-base-MNIST")
     print("=" * 70)
     
     # Set device
@@ -215,32 +215,29 @@ def main():
     print("\n📦 Initializing components...")
     mnist_loader = MNISTLoader()
     caption_generator = DigitCaptionGenerator()
-
-    # Test tokenization
-    print("\n📝 Testing CLIP tokenization...")
-    test_captions = ["A handwritten digit zero", "A handwritten digit five"]
-    test_tokens = clip.tokenize(test_captions)
-    print(f"Caption: '{test_captions[0]}'")
-    print(f"Tokens shape: {test_tokens.shape}")
+    tokenizer = SimpleTokenizer()
     
-    # Create datasets - LARGER for better learning
-    print("\n📊 Creating LARGER datasets...")
-    train_dataset = MNISTCLIPPretrainedDataset(mnist_loader, caption_generator, 'train', 50000)  # 2.5x larger
-    val_dataset = MNISTCLIPPretrainedDataset(mnist_loader, caption_generator, 'test', 5000)   # 2.5x larger
+    print(f"Vocabulary size: {tokenizer.vocab_size}")
     
-    # Create dataloaders - OPTIMIZED batch size
-    batch_size = 128  # Larger batch for stable gradients
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True)
+    # Create datasets
+    print("\n📊 Creating datasets...")
+    train_dataset = MNISTCLIPViTDataset(mnist_loader, caption_generator, tokenizer, 'train', 30000)
+    val_dataset = MNISTCLIPViTDataset(mnist_loader, caption_generator, tokenizer, 'test', 3000)
+    
+    # Create dataloaders
+    batch_size = 64
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
     
     print(f"Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
     
     # Create model
-    print("\n🏗️ Creating Pre-trained CLIP model...")
-    model = CLIPPretrainedMNIST(
-        device=device,
-        freeze_backbone=True,   # FREEZE backbone for maximum stability
-        fine_tune_layers=1      # Only adapter layers (most conservative)
+    print("\n🏗️ Creating CLIP with ViT-base-MNIST...")
+    model = CLIPViTMNIST(
+        vocab_size=tokenizer.vocab_size,
+        output_dim=512,
+        temperature=0.07,
+        freeze_vit=False  # Fine-tune ViT for better adaptation
     ).to(device)
     
     # Count parameters
@@ -248,42 +245,33 @@ def main():
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
-    print(f"Frozen parameters: {total_params - trainable_params:,}")
     
-    # Setup training - OPTIMIZED for Hybrid CLIP (ViT-base-MNIST)
-    num_epochs = 30  # ViT-base-MNIST converges faster
-    learning_rate = 1e-4  # Higher LR since ViT already knows MNIST
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)  # Standard weight decay
-    # Better scheduler with warmup
-    warmup_epochs = 5
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs-warmup_epochs)
-    warmup_scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
+    # Setup training
+    num_epochs = 30
+    learning_rate = 1e-4  # Standard learning rate for ViT fine-tuning
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     
-    print(f"\n🎯 HYBRID CLIP Training setup:")
-    print(f"  Epochs: {num_epochs} (ViT-base-MNIST converges faster)")
-    print(f"  Batch size: {batch_size} (LARGER for stable gradients)")
-    print(f"  Learning rate: {learning_rate} (HIGHER - ViT knows MNIST!)")
-    print(f"  Optimizer: AdamW (standard weight decay)")
+    print(f"\n🎯 ViT-base-MNIST CLIP Training setup:")
+    print(f"  Epochs: {num_epochs}")
+    print(f"  Batch size: {batch_size}")
+    print(f"  Learning rate: {learning_rate}")
+    print(f"  Optimizer: AdamW")
     print(f"  Scheduler: CosineAnnealingLR")
-    print(f"  Architecture: ViT-base-MNIST + CLIP text encoder")
-    print(f"  Dataset: 50K train, 5K val (2.5x LARGER)")
-    print(f"  Model size: 150M parameters")
-    print(f"  Expected: 60-80% accuracy (ViT already trained on MNIST!)")
+    print(f"  ViT: Pre-trained on MNIST (fine-tuned)")
+    print(f"  Expected: MUCH better accuracy (ViT already knows MNIST!)")
     
-    # Training loop with early stopping
-    print(f"\n🚀 Starting HYBRID CLIP training...")
+    # Training loop
+    print(f"\n🚀 Starting ViT-base-MNIST CLIP training...")
     best_val_loss = float('inf')
-    best_val_acc = 0.0
-    patience_counter = 0
-    patience_limit = 10  # Early stopping if no improvement
-
+    
     for epoch in range(1, num_epochs + 1):
         print(f"\nEpoch {epoch}/{num_epochs}")
         print("-" * 50)
         
         # Train
         train_loss = train_epoch(model, train_loader, optimizer, device, epoch)
-
+        
         # Validate
         val_loss, i2t_acc, t2i_acc = validate_model(model, val_loader, device)
         
@@ -299,12 +287,12 @@ def main():
         # Save best model
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), 'models/clip_pretrained_mnist_best.pth')
+            torch.save(model.state_dict(), 'models/clip_vit_mnist_best.pth')
             print("✅ Best model saved!")
     
     # Save final model
-    torch.save(model.state_dict(), 'models/clip_pretrained_mnist_final.pth')
-    print(f"\n🎉 Pre-trained CLIP fine-tuning completed!")
+    torch.save(model.state_dict(), 'models/clip_vit_mnist_final.pth')
+    print(f"\n🎉 ViT-base-MNIST CLIP training completed!")
     print(f"Best validation loss: {best_val_loss:.4f}")
 
 if __name__ == "__main__":
