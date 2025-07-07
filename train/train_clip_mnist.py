@@ -107,16 +107,20 @@ class MNISTCLIPDataset(Dataset):
     def __getitem__(self, idx):
         # Get random digit (0-9)
         digit = np.random.randint(0, 10)
-        
+
         # Get MNIST image for this digit
         image = self.mnist_loader.get_random_image_for_digit(digit, self.split)
-        
-        # Generate caption
-        caption = self.caption_generator.generate_caption(digit)
-        
+
+        # Generate caption with VARIETY (use alternative templates sometimes)
+        if np.random.random() < 0.3:  # 30% chance for alternative caption
+            template_idx = np.random.randint(0, 5)
+            caption = self.caption_generator.generate_alternative_caption(digit, template_idx)
+        else:
+            caption = self.caption_generator.generate_caption(digit)
+
         # Tokenize caption
         text_tokens = self.tokenizer.encode(caption)
-        
+
         return {
             'image': image,
             'text_tokens': text_tokens,
@@ -257,24 +261,33 @@ def main():
         decoded = tokenizer.decode(tokens)
         print(f"  {digit}: {caption} -> {decoded}")
     
-    # Create datasets
-    print("\n📊 Creating datasets...")
-    train_dataset = MNISTCLIPDataset(mnist_loader, caption_generator, tokenizer, 'train', 10000)
-    val_dataset = MNISTCLIPDataset(mnist_loader, caption_generator, tokenizer, 'test', 1000)
+    # Create datasets with LARGER size for better learning
+    print("\n📊 Creating LARGER datasets...")
+    train_dataset = MNISTCLIPDataset(mnist_loader, caption_generator, tokenizer, 'train', 50000)  # 5x larger
+    val_dataset = MNISTCLIPDataset(mnist_loader, caption_generator, tokenizer, 'test', 5000)  # 5x larger
     
-    # Create dataloaders
-    batch_size = 64
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    # Create dataloaders with OPTIMIZED batch size
+    batch_size = 128  # LARGER batch size for better GPU utilization and stable gradients
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True)
     
     print(f"Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
     
-    # Create model
-    print("\n🏗️ Creating CLIP model...")
+    # Create model with IMPROVED architecture
+    print("\n🏗️ Creating ENHANCED CLIP model...")
     model = CLIPMNISTModel(
+        # Vision encoder improvements
+        vision_embed_dim=768,  # Keep standard ViT-B size
+        vision_depth=8,        # REDUCED depth for faster training
+        vision_heads=12,       # Keep standard
+        # Text encoder improvements
         vocab_size=tokenizer.vocab_size,
+        text_embed_dim=512,    # Standard size
+        text_heads=8,          # Standard
+        text_layers=4,         # REDUCED layers for faster training
+        # Output improvements
         output_dim=512,
-        temperature=0.07
+        temperature=0.05       # LOWER temperature for sharper distributions
     ).to(device)
     
     # Count parameters
@@ -283,23 +296,33 @@ def main():
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
     
-    # Setup training
-    num_epochs = 50
-    learning_rate = 1e-4
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+    # Setup training with IMPROVED parameters
+    num_epochs = 100  # DOUBLED epochs for better convergence
+    learning_rate = 2e-4  # HIGHER learning rate for faster learning
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.005)  # REDUCED weight decay
+
+    # IMPROVED scheduler with warmup
+    warmup_epochs = 10
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs-warmup_epochs)
+    warmup_scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
     
-    print(f"\n🎯 Training setup:")
-    print(f"  Epochs: {num_epochs}")
+    print(f"\n🎯 ENHANCED Training setup:")
+    print(f"  Epochs: {num_epochs} (DOUBLED for better convergence)")
     print(f"  Batch size: {batch_size}")
-    print(f"  Learning rate: {learning_rate}")
-    print(f"  Optimizer: AdamW")
-    print(f"  Scheduler: CosineAnnealingLR")
+    print(f"  Learning rate: {learning_rate} (INCREASED for faster learning)")
+    print(f"  Optimizer: AdamW (reduced weight decay)")
+    print(f"  Scheduler: CosineAnnealingLR with warmup")
+    print(f"  Dataset size: {len(train_dataset)} train, {len(val_dataset)} val (5x LARGER)")
+    print(f"  Model: Optimized ViT-B/32 (reduced depth for efficiency)")
+    print(f"  Temperature: 0.05 (LOWER for sharper alignment)")
     
-    # Training loop
-    print(f"\n🚀 Starting training...")
+    # Training loop with EARLY STOPPING
+    print(f"\n🚀 Starting ENHANCED training...")
     best_val_loss = float('inf')
-    
+    best_val_acc = 0.0
+    patience_counter = 0
+    patience_limit = 15  # Early stopping if no improvement for 15 epochs
+
     for epoch in range(1, num_epochs + 1):
         print(f"\nEpoch {epoch}/{num_epochs}")
         print("-" * 50)
