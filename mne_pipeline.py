@@ -87,21 +87,10 @@ passed_idx = []
 rejected_idx = []
 verbose = False
 
-# Implement stratified sampling per class as mentioned in paper
-# Paper achieved 38,509 samples, which is ~3,851 per class (38,509/10)
-target_samples_per_class = 3851
+print("Starting MNE artifact removal processing...")
+print("Using 100μV peak-to-peak threshold (as per paper)")
 
-print("Starting MNE artifact removal processing with stratified sampling...")
-print(f"Target: {target_samples_per_class} samples per class")
-
-# Group data by class for stratified processing
-class_groups = all_data_array.groupby(label)
-class_passed_counts = {cls: 0 for cls in range(10)}
-
-for class_label, class_data in class_groups:
-    print(f"Processing class {int(class_label)}: {len(class_data)} samples")
-
-    for index, row in tqdm(class_data.iterrows(), desc=f"Class {int(class_label)}"):
+for index, row in tqdm(all_data_array.iterrows(), desc="Processing MNE pipeline"):
         try:
             # Extract EEG data for each channel
             data_list = []
@@ -155,8 +144,8 @@ for class_label, class_data in class_groups:
             # Paper uses stratified sampling per class to achieve 38,509 total samples
             # This suggests ~3,851 samples per class (38,509/10 classes)
 
-            # Use strict 100μV peak-to-peak threshold as per paper
-            # With stratified sampling, we maintain the exact paper methodology
+            # Use 100μV peak-to-peak threshold as per paper
+            # "A maximum 100μV peak-to-peak threshold was set based on previous studies"
             threshold_uv = 100.0  # 100 microvolts peak-to-peak threshold
 
             # Find epochs where ANY channel exceeds peak-to-peak threshold
@@ -172,12 +161,6 @@ for class_label, class_data in class_groups:
 
             if len(epochs_clean) > 0:
                 passed_idx.append(index)
-                class_passed_counts[int(class_label)] += 1
-
-                # Stop processing this class if we've reached target
-                if class_passed_counts[int(class_label)] >= target_samples_per_class:
-                    print(f"Class {int(class_label)}: Reached target {target_samples_per_class} samples")
-                    break
             else:
                 rejected_idx.append(index)
 
@@ -187,17 +170,11 @@ for class_label, class_data in class_groups:
             rejected_idx.append(index)
             continue
 
-print(f"\nMNE processing completed with stratified sampling!")
+print(f"\nMNE processing completed!")
 print(f"Total passed samples: {len(passed_idx)}")
 print(f"Total rejected samples: {len(rejected_idx)}")
 print(f"Overall pass rate: {len(passed_idx)/(len(passed_idx)+len(rejected_idx))*100:.2f}%")
-
-print(f"\nPer-class results:")
-for cls in range(10):
-    print(f"Class {cls}: {class_passed_counts[cls]} samples")
-
-print(f"\nTarget (paper): 38,509 samples ({target_samples_per_class} per class)")
-print(f"Achieved: {len(passed_idx)} samples")
+print(f"Threshold used: 100μV peak-to-peak")
 
 mne_epoch_rejection = {'passed':passed_idx,'reject':rejected_idx}
 print(f"{root_dir}/mne_epoch_rejection_idx.pkl")

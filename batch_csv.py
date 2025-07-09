@@ -11,8 +11,8 @@ import pycatch22 as catch22
 from scipy.signal import butter, filtfilt, iirnotch, welch
 from tqdm import tqdm
 
-from Brain_to_Image import helper_functions as hf
-from Brain_to_Image import dataset_formats
+import helper_functions as hf
+import dataset_formats
 
 # Define the function to convert list of single float to int
 def list_float_to_int(lst):
