@@ -9,7 +9,7 @@ import pandas as pd
 import pycatch22 as catch22
 from scipy.signal import butter, filtfilt, iirnotch, welch, firwin, lfilter
 
-from Brain_to_Image import dataset_formats
+import dataset_formats
 
 
 ## HCTSA Catch22 feature set.
@@ -538,21 +538,17 @@ def apply_notch_filter(eeg_data, fs, notch_freqs, notch_widths):
     Apply a notch filter to EEG data to remove line noise.
 
     Args:
-        eeg_data (numpy.ndarray): EEG data (channels x samples)
+        eeg_data (pandas.Series): EEG data with channel names as keys
         fs (float): Sampling frequency of the EEG data
         notch_freqs (list or numpy.ndarray): List of notch frequencies (in Hz)
         notch_widths (list or numpy.ndarray): List of notch widths (in Hz)
 
     Returns:
-        numpy.ndarray: Filtered EEG data
+        pandas.Series: Filtered EEG data
     """
-    # Check if input data has the correct format (channels, samples)
-    if not isinstance(eeg_data,pd.Series) and eeg_data.ndim == 1:
-        eeg_data = eeg_data.to_numpy().reshape(1, -1)
-    elif isinstance(eeg_data,pd.Series):
-        if isinstance(eeg_data[0],list):
-            eeg_data = np.array([item[0] for item in eeg_data])
-
+    # Ensure we have a pandas Series
+    if not isinstance(eeg_data, pd.Series):
+        raise ValueError("eeg_data must be a pandas Series")
 
     filtered_data = eeg_data.copy()
 
@@ -562,7 +558,8 @@ def apply_notch_filter(eeg_data, fs, notch_freqs, notch_widths):
 
         # Apply notch filter to each channel
         for channel in filtered_data.keys():
-            filtered_data[channel] = filtfilt(notch_filter[0], notch_filter[1], filtered_data[channel])
+            if isinstance(filtered_data[channel], (list, np.ndarray)):
+                filtered_data[channel] = filtfilt(notch_filter[0], notch_filter[1], filtered_data[channel])
 
     return filtered_data
 
@@ -593,33 +590,31 @@ def apply_butterworth_filter(eeg_data, fs, lowcut, highcut, order=6):
     Apply a non-causal Butterworth bandpass filter to the input data.
 
     Args:
-        data (numpy.ndarray): Input data (channels x samples)
+        eeg_data (pandas.Series): EEG data with channel names as keys
         fs (float): Sampling frequency of the data
         lowcut (float): Low-cutoff frequency (Hz)
         highcut (float): High-cutoff frequency (Hz)
         order (int): Order of the Butterworth filter (default: 6)
 
     Returns:
-        numpy.ndarray: Filtered data
+        pandas.Series: Filtered data
     """
+    # Ensure we have a pandas Series
+    if not isinstance(eeg_data, pd.Series):
+        raise ValueError("eeg_data must be a pandas Series")
+
     nyquist_freq = 0.5 * fs
     low = lowcut / nyquist_freq
     high = highcut / nyquist_freq
 
     # Compute Butterworth filter coefficients
     b, a = butter(order, [low, high], btype='band', analog=False)
-    # Check if input data has the correct format (channels, samples)
-    if not isinstance(eeg_data,pd.Series) and eeg_data.ndim == 1:
-        eeg_data = eeg_data.to_numpy().reshape(1, -1)
-    elif isinstance(eeg_data,pd.Series):
-        if isinstance(eeg_data[0],list):
-            eeg_data = np.array([item[0] for item in eeg_data])
 
     filtered_data = eeg_data.copy()
     # Apply the filter to each channel
-    #filtered_data = np.zeros_like(data)
     for channel in filtered_data.keys():
-        filtered_data[channel] = filtfilt(b, a, filtered_data[channel])
+        if isinstance(filtered_data[channel], (list, np.ndarray)):
+            filtered_data[channel] = filtfilt(b, a, filtered_data[channel])
 
     return filtered_data
 
