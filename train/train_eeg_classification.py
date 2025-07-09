@@ -2,6 +2,15 @@ import os
 import pickle
 import sys
 
+# Force CPU usage only and set data format
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')
+
+# Set data format to channels_last (NHWC)
+from tensorflow.keras import backend as K
+K.set_image_data_format('channels_last')
+
 from keras import optimizers
 from keras.callbacks import ModelCheckpoint,ReduceLROnPlateau
 from keras.layers import (BatchNormalization, Conv2D, Dense, Dropout, Flatten,
@@ -53,21 +62,32 @@ def save_model(model,name,path):
 
 
 
-run_id = "eeg_classifier_adm5"
+run_id = "eeg_classifier_car_pipeline"
 dataset = "MNIST_EP"
-#root_dir = f"Datasets/MindBigData MNIST of Brain Digits/{dataset}"
-root_dir = "data"
-data_file = "data_train_MindBigData2022_MNIST_EP.pkl"  # "data9032_train_MindBigData2022_MNIST_EP.pkl"
-#data_file = "data.pkl"
-model_save_dir = os.path.join(root_dir,"models")
-batch_size, num_epochs = 128, 150
+root_dir = f"../Datasets/MindBigData MNIST of Brain Digits/{dataset}"
+data_file = "data_4ch_epoch_filtered_324_0-85_train_MindBigData2022_MNIST_EP.pkl"
+model_save_dir = os.path.join("data", "models")
+batch_size, num_epochs = 128, 50  # Reduced epochs for initial testing
 
 print(f"Reading data file {root_dir}/{data_file}")
-eeg_data = pickle.load(open(f"{root_dir}/{data_file}", 'rb'), encoding='bytes')
+eeg_data = pickle.load(open(f"{root_dir}/{data_file}", 'rb'))
 
-#x_train, y_train, x_test, y_test = eeg_data[b'x_train'], eeg_data[b'y_train'], eeg_data[b'x_test'], eeg_data[b'y_test']
-x_train, y_train, x_test, y_test = eeg_data['x_train'], eeg_data['y_train'], eeg_data['x_val'], eeg_data['y_val']
+# Load training data from CAR pipeline output
+x_train, y_train, x_test, y_test = eeg_data['x_train'], eeg_data['y_train'], eeg_data['x_test'], eeg_data['y_test']
 
+print(f"Training data shape: {x_train.shape}")
+print(f"Training labels shape: {y_train.shape}")
+print(f"Test data shape: {x_test.shape}")
+print(f"Test labels shape: {y_test.shape}")
+
+# Ensure data is in correct format (samples, height, width, channels)
+# Current shape should be (samples, 9, 32, 1) which is already correct for NHWC
+print(f"Data format: {K.image_data_format()}")
+print(f"Input shape for model: {x_train.shape[1:]}")
+
+# Create classifier model
+# Input shape: (9, 32, 1) - 9 windows, 32 time points, 1 channel
+print(f"Creating model with input shape: {x_train.shape[1:]}")
 classifier = convolutional_encoder_model(x_train.shape[1], x_train.shape[2], 10)
 
 if not os.path.exists(model_save_dir):
