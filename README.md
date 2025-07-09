@@ -33,3 +33,77 @@ in notebooks the pipeline_data not book shows how this is done with some comment
 ## Training models
 
 apply filtering, artifact removal and CAR, save test/train split as pickle file. Use the train scripts to laod the data and train GAN.
+
+
+## Preprosesing
+
+Pipeline Preprocessing EEG Data
+1. Raw Data Extraction (raw_to_pickle.py)
+  * Mengkonversi file CSV besar dari dataset MindBigData ke format pandas DataFrame
+  * Menyimpan dalam format pickle untuk memudahkan pemrosesan selanjutnya
+  * Dataset yang digunakan: MindBigData2022_MNIST_EP dengan 14 channel EEG
+    ```python
+    ## Takes the large raw data file given from MBD and creates a pandas datatable for easy usage, savig the DF to pickle file.
+
+    big_df = batch.batch_process_csv_pandas(f"{root_dir}/{input_file}",f"{root_dir}/{output_file}")
+    ```
+2. Signal Filtering (filter_data.py)
+Menerapkan dua jenis filter:
+  * Notch Filter: Menghilangkan line noise (50/60 Hz)
+  * Butterworth Bandpass Filter: Memfilter frekuensi dalam rentang tertentu
+    ```python
+    filtered = hf.apply_notch_filter(row[keys_to_import],sample_rate,notch_freqs=notch_freqs,notch_widths=notch_widths)
+    filtered = hf.apply_butterworth_filter(filtered,sample_rate,lowcut,highcut,order=butter_order)
+    ```
+3. Artifact Removal (mne_pipeline.py)
+Menggunakan library MNE untuk:
+  * Menghilangkan artifact dari gerakan mata dan otot
+  * Menerapkan epoch rejection untuk menghilangkan data yang buruk
+  * Menggunakan Average Reference
+  * Membuat fixed-length epochs (2 detik)
+    ```python
+    raw.filter(l_freq=lowcut, h_freq=highcut,verbose=False)
+    raw.set_eeg_reference(ref_channels='average',ch_type='eeg',projection=False,verbose=False)
+    epochs = mne.make_fixed_length_epochs(raw, duration=2, preload=True,verbose=False)
+    epochs_clean = epochs.drop_bad(reject={'eeg': 100e-0},verbose=False)
+    ```
+4. Common Average Reference (CAR) (car_pipeline.py)
+Implementasi dua metode CAR:
+  * Method 1: CAR baseline dikurangi dari setiap sinyal, kemudian korelasi > 0.2
+  * Method 2: Korelasi langsung antara CAR baseline dan setiap sinyal > 0.9 (digunakan dalam paper)
+    ```python
+    # Calculate ERP
+    car = np.mean(arr, axis=0)
+    # Baseline correction (using first 125 ms as baseline)
+    baseline = np.mean(car[:16])
+    car_corrected = car - baseline
+    ```
+5. Sliding Window Processing
+  * Menerapkan sliding window dengan ukuran 32 sample dan overlap 4
+  * Menghasilkan multiple windows dari setiap sinyal 2 detik
+    ```python
+    def sliding_window_eeg(signal, window_size=32, overlap=4):
+        # Calculate the step size
+        step = window_size - overlap
+        # Calculate the number of windows
+        num_windows = (len(signal) - window_size) // step + 1
+    ```
+6. Data Splitting dan Persiapan Training
+  * Membagi data menjadi train/test split (90%/10%)
+  * Mengkonversi label ke format categorical
+  * Menyimpan dalam format yang siap untuk training GAN
+
+Urutan Preprocessing Lengkap:
+1. Raw CSV → Pickle (raw_to_pickle.py)
+2. Apply Filters (filter_data.py) - Notch + Butterworth
+3. Artifact Removal (mne_pipeline.py) - MNE pipeline
+4. CAR Processing (car_pipeline.py) - Common Average Reference
+5. Sliding Window - Membuat multiple windows per sinyal
+6. Train/Test Split - Persiapan data untuk training
+
+Parameter Kunci:
+* Sampling Rate: 128 Hz
+* Signal Length: 256 samples (2 detik)
+* Channels: 14 EEG channels (AF3, AF4, F7, F8, F3, F4, FC5, FC6, T7, T8, P7, P8, O1, O2)
+* Window Size: 32 samples dengan overlap 4
+* CAR Correlation Threshold: 0.925 (method 2)
