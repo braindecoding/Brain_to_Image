@@ -103,8 +103,8 @@ all_corr_keys = [f"{col}_corr" for col in eeg_columns]
 df_copy['corr_mean_all'] = df_copy[all_corr_keys].mean(axis=1)
 
 # Filter based on correlation threshold
-# Method 2 CAR: use 0.9 threshold (as per paper methodology)
-factor = 0.9  # Paper uses ~0.9 correlation for method 2
+# Method 2 CAR: good balance between quality and quantity
+factor = 0.8  # Balanced threshold for adequate training data
 print(f"Applying correlation filter with threshold: {factor}")
 
 # Filter samples with correlation > threshold
